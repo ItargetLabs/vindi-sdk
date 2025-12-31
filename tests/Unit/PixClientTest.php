@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace VindiSdk\Tests\Unit;
 
 use DateTime;
+use GuzzleHttp\Middleware;
 use GuzzleHttp\Client;
 use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
@@ -42,6 +43,8 @@ class PixClientTest extends TestCase
             ])),
         ]);
         $handlerStack = HandlerStack::create($responses);
+        $history = [];
+        $handlerStack->push(Middleware::history($history));
         $httpClient = new Client(['handler' => $handlerStack, 'base_uri' => Environment::sandbox()->getApiUrl()]);
 
         $store = new Store('pub', 'priv', Environment::sandbox());
@@ -60,7 +63,14 @@ class PixClientTest extends TestCase
             address: new Address('Rua', '1', '01234567', 'Bairro', 'SP', 'SP')
         );
 
-        $req = new PixRequest(amount: 100.0, currency: 'BRL', customer: $customer, description: 'PIX');
+        $affiliates = [new \VindiSdk\BillAffiliate(2425, 50.0, 2)];
+        $req = new PixRequest(
+            amount: 100.0,
+            currency: 'BRL',
+            customer: $customer,
+            description: 'PIX',
+            affiliates: $affiliates
+        );
         $res = $client->generatePixCharge($req);
 
         $this->assertSame('b123', $res->tid);
@@ -71,5 +81,20 @@ class PixClientTest extends TestCase
         $this->assertSame('0002010102122689PIXCODE', $res->qrCodeText);
         $this->assertSame('0002010102122689PIXCODE', $res->pixCopyPaste);
         $this->assertGreaterThan(0, $res->expiresInMinutes);
+        $billPosts = array_filter(
+            $history,
+            static function ($h) {
+                return (string) $h['request']->getMethod() === 'POST'
+                    && str_contains((string) $h['request']->getUri()->getPath(), 'bills');
+            }
+        );
+        $last = array_values($billPosts)[0] ?? null;
+        $this->assertNotNull($last);
+        $payload = json_decode((string) $last['request']->getBody(), true);
+        $this->assertIsArray($payload);
+        $this->assertArrayHasKey('bill_affiliates', $payload);
+        $this->assertSame(2425, $payload['bill_affiliates'][0]['affiliate_id']);
+        $this->assertSame(50.0, (float) $payload['bill_affiliates'][0]['amount']);
+        $this->assertSame(2, $payload['bill_affiliates'][0]['amount_type']);
     }
 }

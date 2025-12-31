@@ -12,7 +12,8 @@ class PixRequest
         public float $amount,
         public string $currency,
         public Customer $customer,
-        public ?string $description = null
+        public ?string $description = null,
+        public array $affiliates = []
     ) {
     }
 }

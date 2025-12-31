@@ -21,7 +21,7 @@ class BankClient extends VindiBaseClient
     {
         try {
             $customerId = $this->insureCustomer($request->customer);
-            $bill = $this->createBill([
+            $billPayload = [
                 'customer_id' => $customerId,
                 'payment_method_code' => 'bank_slip',
                 'bill_items' => [
@@ -32,7 +32,14 @@ class BankClient extends VindiBaseClient
                     ],
                 ],
                 'due_at' => $request->dueDate->format('Y-m-d'),
-            ]);
+            ];
+            if (!empty($request->affiliates)) {
+                $billPayload['bill_affiliates'] = array_map(
+                    static fn(\VindiSdk\BillAffiliate $a) => $a->toArray(),
+                    $request->affiliates
+                );
+            }
+            $bill = $this->createBill($billPayload);
             $status = $this->mapVindiStatus((string) ($bill['status']));
             $boletoData = $this->extractBoletoData($bill);
             $paramsUrl = [

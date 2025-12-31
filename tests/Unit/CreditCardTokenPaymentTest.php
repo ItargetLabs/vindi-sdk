@@ -5,35 +5,22 @@ declare(strict_types=1);
 namespace VindiSdk\Tests\Unit;
 
 use GuzzleHttp\Client;
-use GuzzleHttp\Middleware;
 use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Middleware;
 use GuzzleHttp\Psr7\Response;
 use PHPUnit\Framework\TestCase;
-use VindiSdk\Customer;
-use VindiSdk\Address;
-use VindiSdk\Environment;
-use VindiSdk\CreditCard\CreditCard;
 use VindiSdk\CreditCard\CreditCardClient;
-use VindiSdk\CreditCard\CreditCardRequest;
+use VindiSdk\Environment;
 use VindiSdk\Store;
 
-class CreditCardClientTest extends TestCase
+class CreditCardTokenPaymentTest extends TestCase
 {
-    public function testProcessCreditCardPayment(): void
+    public function testProcessTokenPaymentWithAffiliates(): void
     {
         $responses = new MockHandler([
-            new Response(200, [], json_encode(['customers' => []])),
-            new Response(200, [], json_encode(['customer' => ['id' => 1]])),
-            new Response(200, [], json_encode(['payment_profiles' => []])),
-            new Response(200, [], json_encode(['payment_profile' => ['gateway_token' => 'tok123']])),
             new Response(200, [], json_encode(['payment_profile' => ['id' => 77]])),
-            new Response(200, [], json_encode([
-                'bill' => [
-                    'id' => 'b999',
-                    'status' => 'pending'
-                ]
-            ])),
+            new Response(200, [], json_encode(['bill' => ['id' => 'btok', 'status' => 'pending']]))
         ]);
         $handlerStack = HandlerStack::create($responses);
         $history = [];
@@ -47,31 +34,11 @@ class CreditCardClientTest extends TestCase
         $baseCtor = $refClient->getParentClass()->getConstructor();
         $baseCtor->invoke($client, $store, $httpClient);
 
-        $customer = new Customer(
-            id: 'C1',
-            name: 'Nome',
-            email: 'email@ex.com',
-            document: '12345678900',
-            phone: '11999999999',
-            address: new Address('Rua', '1', '01234567', 'Bairro', 'SP', 'SP')
-        );
-        $card = new CreditCard('4111111111111111', 'Cliente', '12', '2028', '123', 'visa');
         $affiliates = [new \VindiSdk\BillAffiliate(2425, 50.0, 2)];
-        $req = new CreditCardRequest(
-            amount: 150.0,
-            currency: 'BRL',
-            customer: $customer,
-            creditCard: $card,
-            installments: 1,
-            description: 'Teste',
-            affiliates: $affiliates
-        );
-        $res = $client->processPayment($req);
+        $res = $client->processTokenPayment('tok_abc', 123.45, $affiliates, 'Pagamento token');
 
-        $this->assertSame('b999', $res->tid);
-        $this->assertSame(150.0, $res->amount);
-        $this->assertSame('BRL', $res->currency);
-        $this->assertNull($res->nsu);
+        $this->assertSame('btok', $res->tid);
+
         $billPosts = array_filter(
             $history,
             static function ($h) {

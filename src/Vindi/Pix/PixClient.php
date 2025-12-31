@@ -21,7 +21,7 @@ class PixClient extends VindiBaseClient
     {
         try {
             $customerId = $this->insureCustomer($request->customer);
-            $bill = $this->createBill([
+            $billPayload = [
                 'customer_id' => $customerId,
                 'payment_method_code' => 'pix',
                 'bill_items' => [
@@ -31,7 +31,14 @@ class PixClient extends VindiBaseClient
                         'amount' => (float) $request->amount
                     ],
                 ],
-            ]);
+            ];
+            if (!empty($request->affiliates)) {
+                $billPayload['bill_affiliates'] = array_map(
+                    static fn(\VindiSdk\BillAffiliate $a) => $a->toArray(),
+                    $request->affiliates
+                );
+            }
+            $bill = $this->createBill($billPayload);
             if (!isset($bill['status'])) {
                 throw new DomainException('Resposta inválida da API Vindi para criação do PIX (status)');
             }

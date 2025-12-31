@@ -50,7 +50,7 @@ class CreditCardClient extends VindiBaseClient
                 ]);
             }
 
-            $bill = $this->createBill([
+            $billPayload = [
                 'customer_id' => $customerId,
                 'payment_method_code' => 'credit_card',
                 'payment_profile' => [
@@ -63,7 +63,14 @@ class CreditCardClient extends VindiBaseClient
                         'amount' => (float) $request->amount,
                     ],
                 ],
-            ]);
+            ];
+            if (!empty($request->affiliates)) {
+                $billPayload['bill_affiliates'] = array_map(
+                    static fn(\VindiSdk\BillAffiliate $a) => $a->toArray(),
+                    $request->affiliates
+                );
+            }
+            $bill = $this->createBill($billPayload);
             if (!isset($bill['status'])) {
                 throw new \DomainException('Falha na criação da fatura');
             }
@@ -97,7 +104,8 @@ class CreditCardClient extends VindiBaseClient
             creditCard: $request->creditCard,
             installments: $installments,
             description: $request->description,
-            metadata: $request->metadata
+            metadata: $request->metadata,
+            affiliates: $request->affiliates
         );
         return $this->processCreditCardPayment($modified);
     }
@@ -114,23 +122,34 @@ class CreditCardClient extends VindiBaseClient
         return $token;
     }
 
-    public function processTokenPayment(string $token, float $amount): CreditCardResponse
-    {
+    public function processTokenPayment(
+        string $token,
+        float $amount,
+        array $affiliates = [],
+        ?string $description = 'Pagamento'
+    ): CreditCardResponse {
         try {
             $profile = $this->createPaymentProfile([
                 'gateway_token' => $token,
                 'payment_method_code' => 'credit_card',
             ]);
-            $bill = $this->createBill([
+            $billPayload = [
                 'payment_method_code' => 'credit_card',
                 'payment_profile' => ['id' => $profile['id'] ?? null],
                 'bill_items' => [
                     [
-                        'description' => 'Pagamento',
-                        'amount' => $amount,
+                        'description' => $description ?? 'Pagamento',
+                        'amount' => (float) $amount,
                     ],
                 ],
-            ]);
+            ];
+            if (!empty($affiliates)) {
+                $billPayload['bill_affiliates'] = array_map(
+                    static fn(\VindiSdk\BillAffiliate $a) => $a->toArray(),
+                    $affiliates
+                );
+            }
+            $bill = $this->createBill($billPayload);
             return new CreditCardResponse(
                 tid: (string) ($bill['id'] ?? uniqid()),
                 status: $this->mapVindiStatus((string) ($bill['status'] ?? 'pending')),

@@ -129,6 +129,61 @@ $parsed = Vindi::parseSettlementWebhook($payload);
 // ['tid', 'transactionId', 'paymentMethodCode', 'statusCode', 'lowDate', 'occurrenceDate']
 ```
 
+## Split de Pagamento (bill_affiliates)
+
+Para dividir o valor da fatura entre afiliados, adicione `bill_affiliates` ao payload automaticamente via objetos `BillAffiliate` nas requisições.
+
+- `amount_type`: 2 = porcentagem, 1 = valor fixo
+
+```php
+<?php
+use VindiSdk\BillAffiliate;
+
+$affiliates = [
+    new BillAffiliate(affiliateId: 2425, amount: 50.0, amountType: 2), // 50%
+    new BillAffiliate(affiliateId: 3000, amount: 10.0, amountType: 1), // R$ 10,00
+];
+
+// PIX
+$pixReq = new \VindiSdk\Pix\PixRequest(
+    amount: 100.0,
+    currency: 'BRL',
+    customer: $customer,
+    description: 'PIX com split',
+    affiliates: $affiliates
+);
+$pixRes = $vindi->createPixCharge($pixReq);
+
+// Cartão
+$ccReq = new \VindiSdk\CreditCard\CreditCardRequest(
+    amount: 150.0,
+    currency: 'BRL',
+    customer: $customer,
+    creditCard: $card,
+    installments: 1,
+    description: 'Cartão com split',
+    affiliates: $affiliates
+);
+$ccRes = $vindi->createCreditCardPayment($ccReq);
+
+// Boleto
+$bankReq = new \VindiSdk\Bank\BankRequest(
+    amount: 200.0,
+    currency: 'BRL',
+    customer: $customer,
+    description: 'Boleto com split',
+    dueDate: new DateTime('+3 days'),
+    number: 'BOL123',
+    affiliates: $affiliates
+);
+$bankRes = $vindi->generateBank($bankReq);
+```
+
+Observações:
+- O SDK não valida somatórios; garanta que percentuais/valores respeitam as regras do seu negócio.
+- `processInstallmentPayment` preserva `affiliates` do pedido original.
+- `processTokenPayment` também aceita `affiliates` e `description`.
+
 ## Testes
 
 1. Crie o arquivo `.env` a partir do exemplo:

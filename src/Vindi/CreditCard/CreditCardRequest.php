@@ -15,7 +15,8 @@ class CreditCardRequest
         public CreditCard $creditCard,
         public ?int $installments = null,
         public ?string $description = null,
-        public array $metadata = []
+        public array $metadata = [],
+        public array $affiliates = []
     ) {
     }
 }

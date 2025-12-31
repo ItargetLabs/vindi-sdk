@@ -16,7 +16,8 @@ class BankRequest
         public string $description,
         public DateTime $dueDate,
         public ?string $number = null,
-        public array $metadata = []
+        public array $metadata = [],
+        public array $affiliates = []
     ) {
     }
 }
