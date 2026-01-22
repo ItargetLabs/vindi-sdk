@@ -64,6 +64,9 @@ class CreditCardClient extends VindiBaseClient
                     ],
                 ],
             ];
+            if ($request->installments && $request->installments > 1) {
+                $billPayload['installments'] = $request->installments;
+            }
             if (!empty($request->affiliates)) {
                 $billPayload['bill_affiliates'] = array_map(
                     static fn(\VindiSdk\BillAffiliate $a) => $a->toArray(),
@@ -125,6 +128,7 @@ class CreditCardClient extends VindiBaseClient
     public function processTokenPayment(
         string $token,
         float $amount,
+        ?int $installments = null,
         array $affiliates = [],
         ?string $description = 'Pagamento'
     ): CreditCardResponse {
@@ -143,6 +147,9 @@ class CreditCardClient extends VindiBaseClient
                     ],
                 ],
             ];
+            if ($installments && $installments > 1) {
+                $billPayload['installments'] = $installments;
+            }
             if (!empty($affiliates)) {
                 $billPayload['bill_affiliates'] = array_map(
                     static fn(\VindiSdk\BillAffiliate $a) => $a->toArray(),
@@ -155,6 +162,8 @@ class CreditCardClient extends VindiBaseClient
                 status: $this->mapVindiStatus((string) ($bill['status'] ?? 'pending')),
                 amount: $amount,
                 currency: 'BRL',
+                installments: $installments && $installments > 1 ? $installments : null,
+                installmentAmount: $installments && $installments > 1 ? ($amount / $installments) : null,
                 gatewayResponse: $bill
             );
         } catch (Exception $e) {
