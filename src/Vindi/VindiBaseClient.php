@@ -61,7 +61,6 @@ class VindiBaseClient
         $charges = (array) ($bill['charges'] ?? []);
         $charge = (array) ($charges[0] ?? []);
         $lastTransaction = (array) ($charge['last_transaction'] ?? []);
-        $gwFields = (array) ($lastTransaction['gateway_response_fields'] ?? []);
 
         $paidAt = (string) ($charge['paid_at'] ?? ($event['created_at'] ?? date('Y-m-d')));
         $occAt = (string) (
@@ -75,20 +74,17 @@ class VindiBaseClient
         $normalizedStatus = self::normalizeStatus($statusRaw);
         $normalizedMethod = self::normalizePaymentMethod($paymentMethodRaw);
 
-        $txId = (string) (
-            $lastTransaction['gateway_response_fields']['transaction_id']
-            ?? ($lastTransaction['gateway_transaction_id'] ?? '')
-        );
         $tokenTransaction = (string) ($lastTransaction['payment_profile']['gateway_token'] ?? '');
         $authorizationCode = (string) ($lastTransaction['gateway_authorization'] ?? '');
         $nsu = (string) ($lastTransaction['gateway_transaction_id'] ?? '');
         $installments = (int) (
             ($charge['installments'] ?? ($bill['installments'] ?? 1))
         );
+        $gwTxId = (string) ($lastTransaction['gateway_response_fields']['transaction_id'] ?? '');
 
         return [
-            'tid' => $txId,
-            'transactionId' => $txId,
+            'tid' => (string) ($bill['id'] ?? ''),
+            'transactionId' => $gwTxId,
             'tokenTransaction' => $tokenTransaction,
             'paymentMethodCode' => $normalizedMethod,
             'statusCode' => $normalizedStatus,

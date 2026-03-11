@@ -36,7 +36,7 @@ class WebhookParseTest extends TestCase
         ];
 
         $parsed = Vindi::parseSettlementWebhook($payload);
-        $this->assertSame('t101', $parsed['tid']);
+        $this->assertSame('b101', $parsed['tid']);
         $this->assertSame('t101', $parsed['transactionId']);
         $this->assertSame('pix', $parsed['paymentMethodCode']);
         $this->assertSame('approved', $parsed['statusCode']);
