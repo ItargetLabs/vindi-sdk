@@ -70,16 +70,55 @@ class VindiBaseClient
         $lowDate = new DateTime(current(explode('T', $paidAt)));
         $occurrenceDate = new DateTime(current(explode('T', $occAt)));
 
+        $paymentMethodRaw = (string) ($charge['payment_method']['code'] ?? '');
+        $statusRaw = (string) ($charge['status'] ?? ($bill['status'] ?? ''));
+        $normalizedStatus = self::normalizeStatus($statusRaw);
+        $normalizedMethod = self::normalizePaymentMethod($paymentMethodRaw);
+
+        $txId = (string) (
+            $lastTransaction['gateway_response_fields']['transaction_id']
+            ?? ($lastTransaction['gateway_transaction_id'] ?? '')
+        );
+        $tokenTransaction = (string) ($lastTransaction['payment_profile']['gateway_token'] ?? '');
+        $authorizationCode = (string) ($lastTransaction['gateway_authorization'] ?? '');
+        $nsu = (string) ($lastTransaction['gateway_transaction_id'] ?? '');
+        $installments = (int) (
+            ($charge['installments'] ?? ($bill['installments'] ?? 1))
+        );
+
         return [
-            'tid' => (string) ($bill['id'] ?? ''),
-            'transactionId' => (string) ($gwFields['transaction_id'] ?? ''),
-            'paymentMethodCode' => (string) ($charge['payment_method']['code'] ?? ''),
-            'statusCode' => (string) ($charge['status'] ?? ($bill['status'] ?? '')),
-            'paidAt' => $paidAt,
-            'occurrenceAt' => $occAt,
+            'tid' => $txId,
+            'transactionId' => $txId,
+            'tokenTransaction' => $tokenTransaction,
+            'paymentMethodCode' => $normalizedMethod,
+            'statusCode' => $normalizedStatus,
             'lowDate' => $lowDate,
             'occurrenceDate' => $occurrenceDate,
+            'authorizationCode' => $authorizationCode,
+            'nsu' => $nsu,
+            'installments' => $installments,
+            'rawPayload' => $payload,
         ];
+    }
+
+    private static function normalizePaymentMethod(string $code): string
+    {
+        $normalized = strtolower(trim($code));
+        return match ($normalized) {
+            'boleto' => 'bank_slip',
+            default => $normalized
+        };
+    }
+
+    private static function normalizeStatus(string $status): string
+    {
+        $normalized = strtolower(trim($status));
+        return match ($normalized) {
+            'paid' => PaymentStatus::APPROVED->value,
+            'pending', 'open' => PaymentStatus::PENDING->value,
+            'canceled', 'cancelled' => PaymentStatus::CANCELLED->value,
+            default => PaymentStatus::PENDING->value
+        };
     }
 
     public function insureCustomer(Customer $customer): int
@@ -109,7 +148,7 @@ class VindiBaseClient
     protected function buildCustomerPayload(Customer $customer): array
     {
         $document = $customer->document ? preg_replace('/\D/', '', $customer->document) : null;
-        $phoneNumber = $customer->phone ? preg_replace('/\D/', '', $customer->phone) : null;
+        $phoneNumber = self::sanitizePhone($customer->phone);
         $payload = [
             'name' => $customer->name,
             'email' => $customer->email,
@@ -132,15 +171,31 @@ class VindiBaseClient
         }
 
         if ($phoneNumber) {
-            $payload['phones'] = [
-                [
-                    'phone_type' => 'mobile',
-                    'number' => $phoneNumber,
-                ]
-            ];
+            $payload['phones'] = [[
+                'phone_type' => 'mobile',
+                'number' => $phoneNumber,
+            ]];
         }
 
         return array_filter($payload, static fn($value) => $value !== null && $value !== '');
+    }
+
+    private static function sanitizePhone(?string $phone): ?string
+    {
+        if (!$phone) {
+            return null;
+        }
+        $digits = preg_replace('/\D/', '', $phone) ?? '';
+        if (strlen($digits) > 11 && substr($digits, 0, 2) === '55') {
+            $digits = substr($digits, 2);
+        }
+        if (strlen($digits) === 12 && substr($digits, 0, 1) === '0') {
+            $digits = substr($digits, 1);
+        }
+        if (strlen($digits) === 10 || strlen($digits) === 11) {
+            return $digits;
+        }
+        return null;
     }
 
     public function createBill(array $payload): array

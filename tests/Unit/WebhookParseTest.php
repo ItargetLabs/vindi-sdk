@@ -36,11 +36,15 @@ class WebhookParseTest extends TestCase
         ];
 
         $parsed = Vindi::parseSettlementWebhook($payload);
-        $this->assertSame('b101', $parsed['tid']);
+        $this->assertSame('t101', $parsed['tid']);
         $this->assertSame('t101', $parsed['transactionId']);
         $this->assertSame('pix', $parsed['paymentMethodCode']);
-        $this->assertSame('paid', $parsed['statusCode']);
+        $this->assertSame('approved', $parsed['statusCode']);
         $this->assertInstanceOf(DateTime::class, $parsed['lowDate']);
         $this->assertInstanceOf(DateTime::class, $parsed['occurrenceDate']);
+        $this->assertArrayHasKey('authorizationCode', $parsed);
+        $this->assertArrayHasKey('nsu', $parsed);
+        $this->assertArrayHasKey('installments', $parsed);
+        $this->assertArrayHasKey('rawPayload', $parsed);
     }
 }
