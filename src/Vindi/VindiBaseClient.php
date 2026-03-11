@@ -148,7 +148,7 @@ class VindiBaseClient
     protected function buildCustomerPayload(Customer $customer): array
     {
         $document = $customer->document ? preg_replace('/\D/', '', $customer->document) : null;
-        $phoneNumber = self::sanitizePhone($customer->phone);
+        $phone = self::parsePhone($customer->phone);
         $payload = [
             'name' => $customer->name,
             'email' => $customer->email,
@@ -170,17 +170,17 @@ class VindiBaseClient
             ];
         }
 
-        if ($phoneNumber) {
+        if ($phone) {
             $payload['phones'] = [[
-                'phone_type' => 'mobile',
-                'number' => $phoneNumber,
+                'phone_type' => $phone['type'],
+                'number' => $phone['number'],
             ]];
         }
 
         return array_filter($payload, static fn($value) => $value !== null && $value !== '');
     }
 
-    private static function sanitizePhone(?string $phone): ?string
+    private static function parsePhone(?string $phone): ?array
     {
         if (!$phone) {
             return null;
@@ -192,8 +192,11 @@ class VindiBaseClient
         if (strlen($digits) === 12 && substr($digits, 0, 1) === '0') {
             $digits = substr($digits, 1);
         }
-        if (strlen($digits) === 10 || strlen($digits) === 11) {
-            return $digits;
+        if (strlen($digits) === 11 && substr($digits, 2, 1) === '9') {
+            return ['number' => $digits, 'type' => 'mobile'];
+        }
+        if (strlen($digits) === 10 && in_array(substr($digits, 2, 1), ['2', '3', '4', '5'], true)) {
+            return ['number' => $digits, 'type' => 'home'];
         }
         return null;
     }
