@@ -13,6 +13,8 @@ use GuzzleHttp\Exception\RequestException;
 
 class VindiBaseClient
 {
+    private const MAX_CUSTOMER_PHONES = 3;
+
     private Client $httpClient;
     private Store $store;
 
@@ -174,10 +176,15 @@ class VindiBaseClient
         }
 
         if ($phone) {
-            $payload['phones'] = [[
+            $entries = [[
                 'phone_type' => $phone['type'],
                 'number' => $phone['number'],
             ]];
+            $phones = [];
+            for ($i = 0; $i < self::MAX_CUSTOMER_PHONES && $i < count($entries); $i++) {
+                $phones[] = $entries[$i];
+            }
+            $payload['phones'] = $phones;
         }
 
         return array_filter($payload, static fn($value) => $value !== null && $value !== '');
