@@ -9,6 +9,7 @@ use DomainException;
 use Exception;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
+use GuzzleHttp\Exception\RequestException;
 
 class VindiBaseClient
 {
@@ -43,6 +44,12 @@ class VindiBaseClient
             $contents = (string) $response->getBody();
             $decoded = json_decode($contents, true);
             return is_array($decoded) ? $decoded : [];
+        } catch (RequestException $e) {
+            $responseBody = $e->getResponse()?->getBody()?->getContents();
+            if (!empty($responseBody)) {
+                throw new Exception($e->getMessage() . ' | response: ' . $responseBody);
+            }
+            throw new Exception($e->getMessage());
         } catch (GuzzleException $e) {
             throw new Exception($e->getMessage());
         }
@@ -182,17 +189,20 @@ class VindiBaseClient
             return null;
         }
         $digits = preg_replace('/\D/', '', $phone) ?? '';
-        if (strlen($digits) > 11 && substr($digits, 0, 2) === '55') {
-            $digits = substr($digits, 2);
+        if ($digits === '') {
+            return null;
         }
-        if (strlen($digits) === 12 && substr($digits, 0, 1) === '0') {
-            $digits = substr($digits, 1);
+        if (str_starts_with($digits, '0')) {
+            $digits = ltrim($digits, '0');
         }
-        if (strlen($digits) === 11 && substr($digits, 2, 1) === '9') {
+        if (!str_starts_with($digits, '55')) {
+            $digits = '55' . $digits;
+        }
+        if (strlen($digits) === 13 && substr($digits, 4, 1) === '9') {
             return ['number' => $digits, 'type' => 'mobile'];
         }
-        if (strlen($digits) === 10 && in_array(substr($digits, 2, 1), ['2', '3', '4', '5'], true)) {
-            return ['number' => $digits, 'type' => 'home'];
+        if (strlen($digits) === 12) {
+            return ['number' => $digits, 'type' => 'landline'];
         }
         return null;
     }
