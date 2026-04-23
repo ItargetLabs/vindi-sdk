@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace VindiSdk;
 
+use VindiSdk\Customer\CallbackVindiCustomerGateway;
+use VindiSdk\Customer\VindiCustomerGateway;
+use VindiSdk\Customer\VindiCustomerPhoneNormalizer;
+use VindiSdk\Customer\VindiCustomerPhoneSlotSynchronizer;
 use DateTime;
 use DomainException;
 use Exception;
@@ -13,10 +17,10 @@ use GuzzleHttp\Exception\RequestException;
 
 class VindiBaseClient
 {
-    private const MAX_CUSTOMER_PHONES = 3;
-
     private Client $httpClient;
     private Store $store;
+    private ?VindiCustomerGateway $cachedCustomerGateway = null;
+    private ?VindiCustomerPhoneSlotSynchronizer $cachedPhoneSlotSynchronizer = null;
 
     public function __construct(Store $store, ?Client $httpClient = null)
     {
@@ -137,7 +141,12 @@ class VindiBaseClient
         );
         if (isset($response['customers'][0]['id']) && is_numeric($response['customers'][0]['id'])) {
             $id = (int) $response['customers'][0]['id'];
-            $payload = $this->buildCustomerPayload($customer);
+            $vindiCustomer = $this->fetchCustomer($id);
+            $parsed = VindiCustomerPhoneNormalizer::parse($customer->phone);
+            if ($parsed !== null) {
+                $vindiCustomer = $this->phoneSlotSynchronizer()->ensureSlots($id, $parsed, $vindiCustomer);
+            }
+            $payload = $this->buildCustomerPayload($customer, $vindiCustomer);
             $this->requestJson('PUT', 'customers/' . $id, $payload, true);
             return $id;
         }
@@ -150,10 +159,29 @@ class VindiBaseClient
         return $id;
     }
 
-    protected function buildCustomerPayload(Customer $customer): array
+    private function customerGateway(): VindiCustomerGateway
+    {
+        return $this->cachedCustomerGateway ??= new CallbackVindiCustomerGateway(
+            fn (string $m, string $p, array $pl, bool $pr): array => $this->requestJson($m, $p, $pl, $pr)
+        );
+    }
+
+    private function phoneSlotSynchronizer(): VindiCustomerPhoneSlotSynchronizer
+    {
+        return $this->cachedPhoneSlotSynchronizer ??= new VindiCustomerPhoneSlotSynchronizer(
+            $this->customerGateway()
+        );
+    }
+
+    private function fetchCustomer(int $id): array
+    {
+        return $this->customerGateway()->fetchById($id);
+    }
+
+    protected function buildCustomerPayload(Customer $customer, ?array $existingVindiCustomer = null): array
     {
         $document = $customer->document ? preg_replace('/\D/', '', $customer->document) : null;
-        $phone = self::parsePhone($customer->phone);
+        $parsed = VindiCustomerPhoneNormalizer::parse($customer->phone);
         $payload = [
             'name' => $customer->name,
             'email' => $customer->email,
@@ -175,43 +203,20 @@ class VindiBaseClient
             ];
         }
 
-        if ($phone) {
-            $entries = [[
-                'phone_type' => $phone['type'],
-                'number' => $phone['number'],
-            ]];
-            $phones = [];
-            for ($i = 0; $i < self::MAX_CUSTOMER_PHONES && $i < count($entries); $i++) {
-                $phones[] = $entries[$i];
+        if ($existingVindiCustomer !== null) {
+            if ($parsed !== null) {
+                $payload['phones'] = VindiCustomerPhoneNormalizer::buildPutPhonesPayload(
+                    $existingVindiCustomer,
+                    $parsed
+                );
             }
-            $payload['phones'] = $phones;
+        } elseif ($parsed !== null) {
+            $payload['phones'] = [
+                VindiCustomerPhoneNormalizer::writeBody($parsed['type'], $parsed['number']),
+            ];
         }
 
         return array_filter($payload, static fn($value) => $value !== null && $value !== '');
-    }
-
-    private static function parsePhone(?string $phone): ?array
-    {
-        if (!$phone) {
-            return null;
-        }
-        $digits = preg_replace('/\D/', '', $phone) ?? '';
-        if ($digits === '') {
-            return null;
-        }
-        if (str_starts_with($digits, '0')) {
-            $digits = ltrim($digits, '0');
-        }
-        if (!str_starts_with($digits, '55')) {
-            $digits = '55' . $digits;
-        }
-        if (strlen($digits) === 13 && substr($digits, 4, 1) === '9') {
-            return ['number' => $digits, 'type' => 'mobile'];
-        }
-        if (strlen($digits) === 12) {
-            return ['number' => $digits, 'type' => 'landline'];
-        }
-        return null;
     }
 
     public function createBill(array $payload): array
